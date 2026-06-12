@@ -1,9 +1,12 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { eventsQuery } from '~/lib/queries'
 import { StatusTag } from '~/routes/index'
 
 export const Route = createFileRoute('/events/')({
+  beforeLoad: ({ context }) => {
+    if (!context.me) throw redirect({ href: '/sign-in' })
+  },
   loader: ({ context }) => context.queryClient.ensureQueryData(eventsQuery),
   component: EventsPage,
 })

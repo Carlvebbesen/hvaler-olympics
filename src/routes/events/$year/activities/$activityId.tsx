@@ -3,10 +3,11 @@ import {
   Link,
   createFileRoute,
   notFound,
+  redirect,
   useNavigate,
 } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { deleteActivity, saveResults, saveTeams } from '~/server/fns'
+import { deleteActivity, saveResults, saveTeams, setOptOut } from '~/server/fns'
 import { activityDetailQuery } from '~/lib/queries'
 import { formatValue, parseValue } from '~/lib/scoring'
 import { KIND_DEFAULTS } from '~/lib/types'
@@ -23,6 +24,9 @@ export const Route = createFileRoute('/events/$year/activities/$activityId')({
       year: String(params.year),
       activityId: params.activityId,
     }),
+  },
+  beforeLoad: ({ context }) => {
+    if (!context.me) throw redirect({ href: '/sign-in' })
   },
   loader: async ({ context, params }) => {
     const detail = await context.queryClient.ensureQueryData(
@@ -109,22 +113,22 @@ function ActivityPage() {
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b-2 border-ink">
-                  <th className="px-4 py-2 font-display text-xs font-bold uppercase tracking-wider">#</th>
-                  <th className="px-4 py-2 font-display text-xs font-bold uppercase tracking-wider">
+                  <th className="px-2 py-2 font-display text-xs font-bold uppercase tracking-wider sm:px-4">#</th>
+                  <th className="px-2 py-2 font-display text-xs font-bold uppercase tracking-wider sm:px-4">
                     {activity.isTeam ? 'Team' : 'Athlete'}
                   </th>
-                  <th className="px-4 py-2 font-display text-xs font-bold uppercase tracking-wider">Result</th>
-                  <th className="px-4 py-2 font-display text-xs font-bold uppercase tracking-wider">Points</th>
+                  <th className="px-2 py-2 font-display text-xs font-bold uppercase tracking-wider sm:px-4">Result</th>
+                  <th className="px-2 py-2 font-display text-xs font-bold uppercase tracking-wider sm:px-4">Points</th>
                 </tr>
               </thead>
               <tbody>
                 {ranked.map((row) => (
                   <tr key={row.subjectId} className="border-b border-ink/15">
-                    <td className="num px-4 py-3 font-bold">
+                    <td className="num px-2 py-3 font-bold sm:px-4">
                       <span aria-hidden="true">{medals[row.rank - 1] ?? row.rank}</span>
                       <span className="sr-only">Rank {row.rank}</span>
                     </td>
-                    <td className="px-4 py-3 font-display font-bold">
+                    <td className="px-2 py-3 font-display font-bold sm:px-4">
                       {subjectName(row.subjectId)}
                       {activity.isTeam ? (
                         <span className="block text-xs font-normal text-ink-soft">
@@ -135,8 +139,8 @@ function ActivityPage() {
                         </span>
                       ) : null}
                     </td>
-                    <td className="num px-4 py-3">{formatValue(activity, row.value)}</td>
-                    <td className="num px-4 py-3 text-lg font-bold text-flag">
+                    <td className="num px-2 py-3 sm:px-4">{formatValue(activity, row.value)}</td>
+                    <td className="num px-2 py-3 text-lg font-bold text-flag sm:px-4">
                       {activity.status === 'scored' ? row.points : '—'}
                     </td>
                   </tr>
@@ -153,6 +157,25 @@ function ActivityPage() {
       ) : (
         <p className="mt-10 text-ink-soft">No results recorded yet.</p>
       )}
+
+      {!activity.isTeam && (activity.optOuts?.length ?? 0) > 0 ? (
+        <section aria-labelledby="optouts-heading" className="mt-8">
+          <h2 id="optouts-heading" className="label">
+            Sitting this one out
+          </h2>
+          <ul className="flex flex-wrap gap-2">
+            {(activity.optOuts ?? []).map((id) => {
+              const profile = profiles.find((p) => p.id === id)
+              return (
+                <li key={id} className="tag py-1.5 opacity-70">
+                  <span aria-hidden="true">{profile?.emoji ?? '🏅'}</span>
+                  {profile?.name ?? 'Unknown athlete'}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {isAdmin ? (
         <AdminZone activity={activity} profiles={profiles} eventParticipantIds={event.participantIds} />
@@ -279,7 +302,7 @@ function TeamEditor({
                     type="button"
                     aria-pressed={selected}
                     onClick={() => toggleMember(index, profile.id)}
-                    className={`tag min-h-9 cursor-pointer ${selected ? 'bg-ink text-paper' : 'opacity-60 hover:opacity-100'}`}
+                    className={`tag min-h-11 cursor-pointer ${selected ? 'bg-ink text-paper' : 'opacity-60 hover:opacity-100'}`}
                   >
                     <span aria-hidden="true">{profile.emoji}</span>
                     {profile.name}
@@ -348,10 +371,22 @@ function ResultsEditor({
   const [markScored, setMarkScored] = React.useState(activity.status === 'scored')
   const [error, setError] = React.useState<string | null>(null)
 
+  const optOuts = new Set(activity.optOuts ?? [])
+
+  const toggleOptOut = useMutation({
+    mutationFn: (data: { participantId: string; optedOut: boolean }) =>
+      setOptOut({
+        data: { year: activity.year, activityId: activity.id, ...data },
+      }),
+    onSuccess: () => queryClient.invalidateQueries(),
+    onError: (err) => setError((err as Error).message),
+  })
+
   const save = useMutation({
     mutationFn: () => {
       const results = []
       for (const subject of subjects) {
+        if (!activity.isTeam && optOuts.has(subject.id)) continue
         const raw = values[subject.id]?.trim()
         if (!raw) continue
         const value = parseValue(activity.kind, raw)
@@ -391,29 +426,58 @@ function ResultsEditor({
     >
       <h3 className="label">Enter results</h3>
       <p className="mb-3 text-sm text-ink-soft">
-        {KIND_DEFAULTS[activity.kind].hint}. Leave blank for no-shows.
+        {KIND_DEFAULTS[activity.kind].hint}. Leave blank for no-shows
+        {activity.isTeam ? '' : ', or mark athletes as sitting out'}.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
-        {subjects.map((subject) => (
-          <div key={subject.id} className="flex items-center gap-3">
-            <label
-              htmlFor={`result-${subject.id}`}
-              className="min-w-0 flex-1 truncate font-display font-bold"
-            >
-              {subject.label}
-            </label>
-            <input
-              id={`result-${subject.id}`}
-              className="input num max-w-36"
-              inputMode="decimal"
-              placeholder={activity.kind === 'time' ? '1:23.4' : '0'}
-              value={values[subject.id] ?? ''}
-              onChange={(e) =>
-                setValues((prev) => ({ ...prev, [subject.id]: e.target.value }))
-              }
-            />
-          </div>
-        ))}
+        {subjects.map((subject) => {
+          const sitsOut = !activity.isTeam && optOuts.has(subject.id)
+          return (
+            <div key={subject.id} className="flex items-center gap-2">
+              <label
+                htmlFor={`result-${subject.id}`}
+                className={`min-w-0 flex-1 truncate font-display font-bold ${sitsOut ? 'opacity-50 line-through' : ''}`}
+              >
+                {subject.label}
+              </label>
+              {sitsOut ? (
+                <span className="tag opacity-70">sitting out</span>
+              ) : (
+                <input
+                  id={`result-${subject.id}`}
+                  className="input num max-w-36"
+                  inputMode="decimal"
+                  placeholder={activity.kind === 'time' ? '1:23.4' : '0'}
+                  value={values[subject.id] ?? ''}
+                  onChange={(e) =>
+                    setValues((prev) => ({ ...prev, [subject.id]: e.target.value }))
+                  }
+                />
+              )}
+              {!activity.isTeam ? (
+                <button
+                  type="button"
+                  className="btn btn-sm shrink-0"
+                  disabled={toggleOptOut.isPending}
+                  aria-pressed={sitsOut}
+                  aria-label={
+                    sitsOut
+                      ? `Put ${subject.label} back in the activity`
+                      : `Mark ${subject.label} as sitting out`
+                  }
+                  onClick={() =>
+                    toggleOptOut.mutate({
+                      participantId: subject.id,
+                      optedOut: !sitsOut,
+                    })
+                  }
+                >
+                  {sitsOut ? 'Re-enter' : 'Sits out'}
+                </button>
+              ) : null}
+            </div>
+          )
+        })}
       </div>
 
       {error ? (

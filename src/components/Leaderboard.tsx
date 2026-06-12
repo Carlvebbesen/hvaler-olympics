@@ -5,9 +5,17 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   useReactTable,
+  type RowData,
   type SortingState,
 } from '@tanstack/react-table'
 import type { LeaderboardRow } from '~/lib/types'
+
+declare module '@tanstack/react-table' {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData extends RowData, TValue> {
+    className?: string
+  }
+}
 
 const col = createColumnHelper<LeaderboardRow>()
 
@@ -48,6 +56,7 @@ const columns = [
   }),
   col.accessor('activitiesPlayed', {
     header: 'Played',
+    meta: { className: 'hidden sm:table-cell' },
     cell: (info) => <span className="num">{info.getValue()}</span>,
   }),
   col.accessor('totalPoints', {
@@ -121,7 +130,7 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
                           ? 'descending'
                           : 'none'
                     }
-                    className="px-3 py-2 font-display text-xs font-bold uppercase tracking-wider sm:px-4"
+                    className={`px-2 py-2 font-display text-xs font-bold uppercase tracking-wider sm:px-4 ${header.column.columnDef.meta?.className ?? ''}`}
                   >
                     {header.column.getCanSort() ? (
                       <button
@@ -150,7 +159,10 @@ export function Leaderboard({ rows }: { rows: LeaderboardRow[] }) {
               className={`border-b border-ink/15 ${index === 0 && sorting.length === 0 ? 'bg-gold/10' : ''}`}
             >
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-3 py-3 sm:px-4">
+                <td
+                  key={cell.id}
+                  className={`px-2 py-3 sm:px-4 ${cell.column.columnDef.meta?.className ?? ''}`}
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}

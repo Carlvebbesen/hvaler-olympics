@@ -109,7 +109,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 </span>
               </Link>
               <div className="ml-auto flex items-center gap-1 sm:gap-2">
-                <NavLink to="/events" label="Games" />
+                {me ? <NavLink to="/events" label="Games" /> : null}
                 {me?.isAdmin ? <NavLink to="/admin" label="Admin" /> : null}
                 <Show when="signed-in">
                   <NavLink to="/profile" label="Profile" />
@@ -147,7 +147,7 @@ function NavLink({ to, label }: { to: string; label: string }) {
   return (
     <Link
       to={to}
-      className="rounded-full px-3 py-2 font-display text-sm font-bold uppercase tracking-wide hover:bg-paper-deep"
+      className="inline-flex min-h-11 items-center rounded-full px-3 font-display text-sm font-bold uppercase tracking-wide hover:bg-paper-deep"
       activeProps={{ className: 'bg-ink text-paper hover:bg-ink' }}
     >
       {label}

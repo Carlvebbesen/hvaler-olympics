@@ -134,6 +134,12 @@ body::after {
     padding: 0.25rem 0.9rem;
     font-size: 0.8rem;
   }
+  /* 44px touch targets on touch devices */
+  @media (pointer: coarse) {
+    .btn-sm {
+      min-height: 2.75rem;
+    }
+  }
 
   .input {
     width: 100%;

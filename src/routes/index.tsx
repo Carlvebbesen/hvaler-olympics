@@ -13,6 +13,7 @@ export const Route = createFileRoute('/')({
 })
 
 function HomePage() {
+  const { me } = Route.useRouteContext()
   const { data: home } = useSuspenseQuery(homeQuery)
 
   return (
@@ -44,9 +45,11 @@ function HomePage() {
                     {home.event.name}
                   </Link>
                 ) : null}
-                <Link to="/events" className="btn">
-                  All games
-                </Link>
+                {me ? (
+                  <Link to="/events" className="btn">
+                    All games
+                  </Link>
+                ) : null}
                 <Show when="signed-out">
                   <SignInButton mode="modal">
                     <button type="button" className="btn btn-ink">
@@ -102,12 +105,22 @@ function HomePage() {
             </Link>
           </div>
         </section>
-      ) : (
+      ) : me ? (
         <section className="mx-auto max-w-3xl px-6 py-20 text-center">
           <h2 className="display-tight text-4xl">No games yet</h2>
           <p className="mt-4 text-ink-soft">
-            The torch hasn't been lit. Sign in — the first athlete becomes head of
-            the olympic committee and can create the first games.
+            The torch hasn't been lit.{' '}
+            {me.isAdmin
+              ? 'Head to the admin page and create the first games.'
+              : 'The olympic committee has yet to create the first games.'}
+          </p>
+        </section>
+      ) : (
+        <section className="mx-auto max-w-3xl px-6 py-20 text-center">
+          <h2 className="display-tight text-4xl">Athletes only</h2>
+          <p className="mt-4 text-ink-soft">
+            Standings, activities and the record books are for the family. Sign in
+            to enter the stadium.
           </p>
         </section>
       )}

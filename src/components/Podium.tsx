@@ -15,7 +15,7 @@ export function Podium({ rows }: { rows: LeaderboardRow[] }) {
       {STEPS.map(({ place, height, tone, label }) => {
         const row = top[place - 1]
         return (
-          <div key={place} className="flex w-24 flex-col items-center sm:w-32">
+          <div key={place} className="flex min-w-0 max-w-24 flex-1 flex-col items-center sm:max-w-32">
             {row ? (
               <div className="mb-2 flex flex-col items-center">
                 <span className="text-3xl sm:text-4xl" aria-hidden="true">

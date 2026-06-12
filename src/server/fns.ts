@@ -95,6 +95,7 @@ export const listProfiles = createServerFn({ method: 'GET' }).handler(
 
 export const listEvents = createServerFn({ method: 'GET' }).handler(
   async () => {
+    await requireUserId()
     const events = await db.listEvents()
     const withCounts = await Promise.all(
       events.map(async (event) => {
@@ -164,6 +165,7 @@ export const setParticipant = createServerFn({ method: 'POST' })
 export const getEventDetail = createServerFn({ method: 'GET' })
   .validator((data: { year: number }) => data)
   .handler(async ({ data }) => {
+    await requireUserId()
     const [event, activities, profiles] = await Promise.all([
       db.getEvent(data.year),
       db.listActivities(data.year),
@@ -216,6 +218,7 @@ export const createActivity = createServerFn({ method: 'POST' })
       target: data.kind === 'guess' ? data.target : undefined,
       isTeam: data.isTeam,
       teams: [],
+      optOuts: [],
       pointsDistribution: data.pointsDistribution,
       results: [],
       status: 'open',
@@ -259,6 +262,36 @@ export const saveTeams = createServerFn({ method: 'POST' })
     return updated
   })
 
+export const setOptOut = createServerFn({ method: 'POST' })
+  .validator(
+    (data: {
+      year: number
+      activityId: string
+      participantId: string
+      optedOut: boolean
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin()
+    const activity = await db.getActivity(data.year, data.activityId)
+    if (!activity) throw new Error('Activity not found')
+    if (activity.isTeam)
+      throw new Error('For team activities, just leave them off the teams')
+    const optOuts = new Set(activity.optOuts ?? [])
+    if (data.optedOut) optOuts.add(data.participantId)
+    else optOuts.delete(data.participantId)
+    const updated: Activity = {
+      ...activity,
+      optOuts: [...optOuts],
+      // A sitting-out athlete can't keep a result on the board
+      results: data.optedOut
+        ? activity.results.filter((r) => r.subjectId !== data.participantId)
+        : activity.results,
+    }
+    await db.putActivity(updated)
+    return updated
+  })
+
 export const saveResults = createServerFn({ method: 'POST' })
   .validator(
     (data: {
@@ -272,7 +305,10 @@ export const saveResults = createServerFn({ method: 'POST' })
     await requireAdmin()
     const activity = await db.getActivity(data.year, data.activityId)
     if (!activity) throw new Error('Activity not found')
-    const results = data.results.filter((r) => Number.isFinite(r.value))
+    const optOuts = new Set(activity.optOuts ?? [])
+    const results = data.results.filter(
+      (r) => Number.isFinite(r.value) && !optOuts.has(r.subjectId),
+    )
     const updated: Activity = {
       ...activity,
       results,
@@ -285,6 +321,7 @@ export const saveResults = createServerFn({ method: 'POST' })
 export const getActivityDetail = createServerFn({ method: 'GET' })
   .validator((data: { year: number; activityId: string }) => data)
   .handler(async ({ data }) => {
+    await requireUserId()
     const [activity, event, profiles] = await Promise.all([
       db.getActivity(data.year, data.activityId),
       db.getEvent(data.year),
@@ -297,6 +334,9 @@ export const getActivityDetail = createServerFn({ method: 'GET' })
 // ---------- Home ----------
 
 export const getHome = createServerFn({ method: 'GET' }).handler(async () => {
+  // The landing page stays reachable signed-out, but shows no game data
+  const { isAuthenticated } = await auth()
+  if (!isAuthenticated) return null
   const events = await db.listEvents()
   if (events.length === 0) return null
   const sorted = events.sort((a, b) => b.year - a.year)

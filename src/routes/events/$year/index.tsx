@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Link, createFileRoute, notFound } from '@tanstack/react-router'
+import { Link, createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createActivity, setParticipant } from '~/server/fns'
 import { eventDetailQuery } from '~/lib/queries'
@@ -19,6 +19,9 @@ export const Route = createFileRoute('/events/$year/')({
       return { year }
     },
     stringify: (params) => ({ year: String(params.year) }),
+  },
+  beforeLoad: ({ context }) => {
+    if (!context.me) throw redirect({ href: '/sign-in' })
   },
   loader: async ({ context, params }) => {
     const detail = await context.queryClient.ensureQueryData(
@@ -55,7 +58,7 @@ function EventPage() {
               </p>
             ) : null}
           </div>
-          <span aria-hidden="true" className="display-tight rotate-3 text-7xl text-flag/20 sm:text-8xl">
+          <span aria-hidden="true" className="display-tight hidden rotate-3 text-8xl text-flag/20 sm:block">
             {event.year}
           </span>
         </div>

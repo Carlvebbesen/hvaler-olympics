@@ -54,6 +54,8 @@ export type Activity = {
   target?: number
   isTeam: boolean
   teams: Team[]
+  /** Participants sitting this one out (individual activities only) */
+  optOuts?: string[]
   /** Points handed out by rank: index 0 = 1st place, etc. */
   pointsDistribution: number[]
   results: ResultEntry[]
