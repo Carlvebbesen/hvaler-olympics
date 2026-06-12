@@ -1,20 +1,21 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "hvaler-olympics",
-  "compatibility_date": "2025-09-02",
-  "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry",
-  "kv_namespaces": [
-    {
-      "binding": "OLYMPICS_KV",
-      // Replace with your real namespace id before deploying:
-      //   wrangler kv namespace create OLYMPICS_KV
-      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
-    }
-  ],
-  "vars": {
-    // Public Clerk key is safe to keep here; the secret key must be set with:
-    //   wrangler secret put CLERK_SECRET_KEY
-    "CLERK_PUBLISHABLE_KEY": ""
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "hvaler-olympics",
+	"compatibility_date": "2025-09-02",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "@tanstack/react-start/server-entry",
+	"kv_namespaces": [
+		{
+			"binding": "OLYMPICS_KV",
+			"id": "5d4883df195448469c7e1029b1a0431b",
+			"remote": true
+		}
+	],
+	"vars": {
+		// Public Clerk key is safe to keep here; the secret key must be set with:
+		//   wrangler secret put CLERK_SECRET_KEY
+		"CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuY3ZlYmJlc2VuLm5vJA"
+	}
 }
