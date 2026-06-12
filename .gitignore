@@ -1,0 +1,14 @@
+node_modules
+dist
+.wrangler
+.env
+.env.*
+!.env.example
+.dev.vars
+!.dev.vars.example
+.tanstack
+.nitro
+.output
+worker-configuration.d.ts
+src/routeTree.gen.ts
+.DS_Store

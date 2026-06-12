@@ -1,0 +1,3 @@
+# Copy to .dev.vars — read by the Cloudflare dev runtime (server side)
+CLERK_PUBLISHABLE_KEY=pk_test_xxx
+CLERK_SECRET_KEY=sk_test_xxx
