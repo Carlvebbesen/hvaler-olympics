@@ -1,3 +1,4 @@
+import { DEFAULT_POINTS } from './types'
 import type {
   Activity,
   LeaderboardRow,
@@ -29,14 +30,17 @@ export function teamPointsDistribution(teamCount: number): number[] {
 
 /**
  * The points actually used to score an activity. Team activities derive their
- * distribution from the number of teams; individual activities use their own.
+ * distribution from the number of teams; individual activities use the points
+ * set once for the whole event (falling back to the defaults for old data).
  */
 export function effectivePointsDistribution(
-  activity: Pick<Activity, 'isTeam' | 'teams' | 'pointsDistribution'>,
+  activity: Pick<Activity, 'isTeam' | 'teams'>,
+  eventDistribution: number[] | undefined,
 ): number[] {
-  return activity.isTeam
-    ? teamPointsDistribution(activity.teams.length)
-    : activity.pointsDistribution
+  if (activity.isTeam) return teamPointsDistribution(activity.teams.length)
+  return eventDistribution && eventDistribution.length > 0
+    ? eventDistribution
+    : DEFAULT_POINTS
 }
 
 /**
@@ -45,7 +49,10 @@ export function effectivePointsDistribution(
  * (1, 2, 2, 4, ...) and receive the same points, with the skipped
  * place(s) handed out to nobody.
  */
-export function rankActivity(activity: Activity): RankedResult[] {
+export function rankActivity(
+  activity: Activity,
+  eventDistribution: number[],
+): RankedResult[] {
   const score = (value: number) => {
     switch (activity.direction) {
       case 'lowest':
@@ -58,7 +65,7 @@ export function rankActivity(activity: Activity): RankedResult[] {
   }
 
   const sorted = [...activity.results].sort((a, b) => score(a.value) - score(b.value))
-  const distribution = effectivePointsDistribution(activity)
+  const distribution = effectivePointsDistribution(activity, eventDistribution)
 
   const ranked: RankedResult[] = []
   for (let i = 0; i < sorted.length; i++) {
@@ -113,7 +120,7 @@ export function buildLeaderboard(
 
   for (const activity of activities) {
     if (activity.status !== 'scored') continue
-    for (const result of rankActivity(activity)) {
+    for (const result of rankActivity(activity, event.pointsDistribution)) {
       for (const memberId of result.memberIds) {
         const row = rows.get(memberId)
         if (!row) continue

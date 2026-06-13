@@ -51,7 +51,7 @@ function ActivityPage() {
   const { activity, event, profiles, ranked } = detail
   const isAdmin = me?.isAdmin ?? false
   const medals = ['🥇', '🥈', '🥉']
-  const pointsByRank = effectivePointsDistribution(activity)
+  const pointsByRank = effectivePointsDistribution(activity, event.pointsDistribution)
 
   const subjectName = (subjectId: string) => {
     if (activity.isTeam) {
@@ -99,16 +99,23 @@ function ActivityPage() {
           Points by rank
         </h2>
         {pointsByRank.length > 0 ? (
-          <ol className="flex flex-wrap gap-2">
-            {pointsByRank.map((points, index) => (
-              <li key={index} className="panel px-3 py-2 text-center" style={{ boxShadow: 'var(--shadow-print-sm)' }}>
-                <span className="block text-xs text-ink-soft">
-                  {medals[index] ?? `${index + 1}.`}
-                </span>
-                <span className="num font-bold">{points}</span>
-              </li>
-            ))}
-          </ol>
+          <>
+            <ol className="flex flex-wrap gap-2">
+              {pointsByRank.map((points, index) => (
+                <li key={index} className="panel px-3 py-2 text-center" style={{ boxShadow: 'var(--shadow-print-sm)' }}>
+                  <span className="block text-xs text-ink-soft">
+                    {medals[index] ?? `${index + 1}.`}
+                  </span>
+                  <span className="num font-bold">{points}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-2 text-sm text-ink-soft">
+              {activity.isTeam
+                ? 'Team points come from the number of teams.'
+                : 'Points are set once for the whole Olympics, not per activity — admins change them in the event’s Olympics settings.'}
+            </p>
+          </>
         ) : (
           <p className="text-ink-soft">
             Points are set from the number of teams — draw the teams below to see them.

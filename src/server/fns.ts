@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { auth, clerkClient } from '@clerk/tanstack-react-start/server'
 import { db } from './kv'
 import { buildLeaderboard, rankActivity } from '~/lib/scoring'
+import { DEFAULT_POINTS } from '~/lib/types'
 import type {
   Activity,
   ActivityKind,
@@ -182,10 +183,40 @@ export const createEvent = createServerFn({ method: 'POST' })
       location: data.location?.trim() || undefined,
       status: data.status,
       participantIds: [],
+      pointsDistribution: DEFAULT_POINTS,
       createdAt: new Date().toISOString(),
     }
     await db.putEvent(event)
     return event
+  })
+
+export const updateEventSettings = createServerFn({ method: 'POST' })
+  .validator(
+    (data: {
+      year: number
+      name: string
+      motto?: string
+      location?: string
+      pointsDistribution: number[]
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin()
+    const event = await db.getEvent(data.year)
+    if (!event) throw new Error('Event not found')
+    const name = data.name.trim()
+    if (!name) throw new Error('Name is required')
+    if (data.pointsDistribution.length === 0)
+      throw new Error('Points distribution is required')
+    const updated: OlympicsEvent = {
+      ...event,
+      name,
+      motto: data.motto?.trim() || undefined,
+      location: data.location?.trim() || undefined,
+      pointsDistribution: data.pointsDistribution,
+    }
+    await db.putEvent(updated)
+    return updated
   })
 
 export const updateEventStatus = createServerFn({ method: 'POST' })
@@ -247,7 +278,6 @@ export const createActivity = createServerFn({ method: 'POST' })
       direction: ScoringDirection
       target?: number
       isTeam: boolean
-      pointsDistribution: number[]
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -256,9 +286,6 @@ export const createActivity = createServerFn({ method: 'POST' })
     if (!event) throw new Error('Event not found')
     const name = data.name.trim()
     if (!name) throw new Error('Activity name is required')
-    // Team activities derive their points from the number of teams at scoring time.
-    if (!data.isTeam && data.pointsDistribution.length === 0)
-      throw new Error('Points distribution is required')
     if (data.kind === 'guess' && data.target === undefined)
       throw new Error('A guess activity needs a target value')
     const activity: Activity = {
@@ -273,7 +300,6 @@ export const createActivity = createServerFn({ method: 'POST' })
       isTeam: data.isTeam,
       teams: [],
       optOuts: [],
-      pointsDistribution: data.pointsDistribution,
       results: [],
       status: 'open',
       createdAt: new Date().toISOString(),
@@ -382,7 +408,12 @@ export const getActivityDetail = createServerFn({ method: 'GET' })
       db.listProfiles(),
     ])
     if (!activity || !event) return null
-    return { activity, event, profiles, ranked: rankActivity(activity) }
+    return {
+      activity,
+      event,
+      profiles,
+      ranked: rankActivity(activity, event.pointsDistribution),
+    }
   })
 
 // ---------- Home ----------

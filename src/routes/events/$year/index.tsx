@@ -1,11 +1,11 @@
 import * as React from 'react'
 import { Link, createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createActivity, setParticipant } from '~/server/fns'
+import { createActivity, setParticipant, updateEventSettings } from '~/server/fns'
 import { eventDetailQuery } from '~/lib/queries'
 import { effectivePointsDistribution, parsePointsDistribution } from '~/lib/scoring'
 import { DEFAULT_POINTS, KIND_DEFAULTS } from '~/lib/types'
-import type { ActivityKind, ScoringDirection } from '~/lib/types'
+import type { ActivityKind, OlympicsEvent, ScoringDirection } from '~/lib/types'
 import { Podium } from '~/components/Podium'
 import { Leaderboard } from '~/components/Leaderboard'
 import { Waves } from '~/components/Waves'
@@ -122,7 +122,10 @@ function EventPage() {
                         : 'closest wins'}
                   </p>
                   {(() => {
-                    const dist = effectivePointsDistribution(activity)
+                    const dist = effectivePointsDistribution(
+                      activity,
+                      event.pointsDistribution,
+                    )
                     return dist.length > 0 ? (
                       <p className="num mt-3 text-xs text-ink-soft">
                         {dist.slice(0, 4).join(' · ')}
@@ -140,7 +143,15 @@ function EventPage() {
           </ul>
         )}
 
-        {isAdmin ? <NewActivityForm year={year} /> : null}
+        {isAdmin ? (
+          <>
+            <EventSettings event={event} />
+            <NewActivityForm
+              year={year}
+              pointsDistribution={event.pointsDistribution}
+            />
+          </>
+        ) : null}
       </section>
 
       <section aria-labelledby="athletes-heading" className="mx-auto max-w-6xl px-6 py-12">
@@ -222,7 +233,141 @@ function AdminParticipants({
   )
 }
 
-function NewActivityForm({ year }: { year: number }) {
+function EventSettings({ event }: { event: OlympicsEvent }) {
+  const queryClient = useQueryClient()
+  const [name, setName] = React.useState(event.name)
+  const [motto, setMotto] = React.useState(event.motto ?? '')
+  const [location, setLocation] = React.useState(event.location ?? '')
+  const [points, setPoints] = React.useState(
+    (event.pointsDistribution.length ? event.pointsDistribution : DEFAULT_POINTS).join(
+      ', ',
+    ),
+  )
+  const [formError, setFormError] = React.useState<string | null>(null)
+  const [saved, setSaved] = React.useState(false)
+
+  const save = useMutation({
+    mutationFn: () => {
+      const parsed = parsePointsDistribution(points)
+      if (!parsed) throw new Error('Points must be numbers, e.g. “1000, 900, 800”')
+      return updateEventSettings({
+        data: { year: event.year, name, motto, location, pointsDistribution: parsed },
+      })
+    },
+    onSuccess: async () => {
+      setFormError(null)
+      setSaved(true)
+      await queryClient.invalidateQueries()
+    },
+    onError: (error) => {
+      setSaved(false)
+      setFormError((error as Error).message)
+    },
+  })
+
+  return (
+    <details className="panel mt-8 p-6">
+      <summary className="cursor-pointer font-display text-lg font-bold uppercase tracking-wide">
+        ⚙ Olympics settings
+      </summary>
+      <form
+        className="mt-6 grid gap-5 sm:grid-cols-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          save.mutate()
+        }}
+      >
+        <div className="sm:col-span-2">
+          <label className="label" htmlFor="settings-name">
+            Name
+          </label>
+          <input
+            id="settings-name"
+            className="input"
+            required
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+              setSaved(false)
+            }}
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="settings-motto">
+            Motto <span className="font-normal normal-case text-ink-soft">(optional)</span>
+          </label>
+          <input
+            id="settings-motto"
+            className="input"
+            value={motto}
+            onChange={(e) => {
+              setMotto(e.target.value)
+              setSaved(false)
+            }}
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="settings-location">
+            Location
+          </label>
+          <input
+            id="settings-location"
+            className="input"
+            value={location}
+            onChange={(e) => {
+              setLocation(e.target.value)
+              setSaved(false)
+            }}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="label" htmlFor="settings-points">
+            Points by rank
+          </label>
+          <input
+            id="settings-points"
+            className="input num"
+            required
+            value={points}
+            onChange={(e) => {
+              setPoints(e.target.value)
+              setSaved(false)
+            }}
+          />
+          <p className="mt-1 text-sm text-ink-soft">
+            Applies to every individual activity in these games. First number
+            goes to 1st place, second to 2nd, and so on. Ranks beyond the list
+            get 0. Ties share a place and the next is skipped. Team activities
+            still score by the number of teams.
+          </p>
+        </div>
+
+        {formError ? (
+          <p role="alert" className="rounded border-2 border-flag bg-flag/10 px-4 py-2 text-flag-deep sm:col-span-2">
+            {formError}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
+          <button type="submit" className="btn btn-primary" disabled={save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save settings'}
+          </button>
+          {saved && !save.isPending ? (
+            <span className="font-display text-sm font-bold text-sea">Saved ✓</span>
+          ) : null}
+        </div>
+      </form>
+    </details>
+  )
+}
+
+function NewActivityForm({
+  year,
+  pointsDistribution,
+}: {
+  year: number
+  pointsDistribution: number[]
+}) {
   const queryClient = useQueryClient()
   const [name, setName] = React.useState('')
   const [description, setDescription] = React.useState('')
@@ -231,19 +376,11 @@ function NewActivityForm({ year }: { year: number }) {
   const [unit, setUnit] = React.useState('')
   const [target, setTarget] = React.useState('')
   const [isTeam, setIsTeam] = React.useState(false)
-  const [points, setPoints] = React.useState(DEFAULT_POINTS.join(', '))
   const [formError, setFormError] = React.useState<string | null>(null)
   const detailsRef = React.useRef<HTMLDetailsElement>(null)
 
   const create = useMutation({
     mutationFn: () => {
-      // Team activities derive their points from the number of teams.
-      let pointsDistribution: number[] = []
-      if (!isTeam) {
-        const parsed = parsePointsDistribution(points)
-        if (!parsed) throw new Error('Points must be numbers, e.g. “1000, 900, 800”')
-        pointsDistribution = parsed
-      }
       return createActivity({
         data: {
           year,
@@ -254,7 +391,6 @@ function NewActivityForm({ year }: { year: number }) {
           direction,
           target: kind === 'guess' ? Number(target) : undefined,
           isTeam,
-          pointsDistribution,
         },
       })
     },
@@ -400,20 +536,15 @@ function NewActivityForm({ year }: { year: number }) {
           </div>
         ) : (
           <div className="sm:col-span-2">
-            <label className="label" htmlFor="activity-points">
-              Points by rank
-            </label>
-            <input
-              id="activity-points"
-              className="input num"
-              required
-              value={points}
-              onChange={(e) => setPoints(e.target.value)}
-            />
+            <p className="label">Points by rank</p>
+            <p className="num mt-1 text-sm text-ink-soft">
+              {(pointsDistribution.length ? pointsDistribution : DEFAULT_POINTS).join(
+                ' · ',
+              )}
+            </p>
             <p className="mt-1 text-sm text-ink-soft">
-              First number goes to 1st place, second to 2nd place, and so on.
-              Ranks beyond the list get 0. Ties share a place and the next
-              place is skipped.
+              Points are set once for the whole Olympics and apply to every
+              activity. Change them in “Olympics settings” above.
             </p>
           </div>
         )}

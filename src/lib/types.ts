@@ -24,6 +24,11 @@ export type OlympicsEvent = {
   location?: string
   status: EventStatus
   participantIds: string[]
+  /**
+   * Points handed out by rank for every individual activity in this event:
+   * index 0 = 1st place, etc. Team activities derive their own from team count.
+   */
+  pointsDistribution: number[]
   createdAt: string
 }
 
@@ -66,8 +71,6 @@ export type Activity = {
   teams: Team[]
   /** Participants sitting this one out (individual activities only) */
   optOuts?: string[]
-  /** Points handed out by rank: index 0 = 1st place, etc. */
-  pointsDistribution: number[]
   results: ResultEntry[]
   status: 'open' | 'scored'
   createdAt: string
