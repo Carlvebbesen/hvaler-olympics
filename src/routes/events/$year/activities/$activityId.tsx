@@ -9,7 +9,12 @@ import {
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { deleteActivity, saveResults, saveTeams, setOptOut } from '~/server/fns'
 import { activityDetailQuery } from '~/lib/queries'
-import { formatValue, parseValue } from '~/lib/scoring'
+import {
+  effectivePointsDistribution,
+  formatTime,
+  formatValue,
+  parseValue,
+} from '~/lib/scoring'
 import { KIND_DEFAULTS } from '~/lib/types'
 import type { Activity, Profile, Team } from '~/lib/types'
 
@@ -46,6 +51,7 @@ function ActivityPage() {
   const { activity, event, profiles, ranked } = detail
   const isAdmin = me?.isAdmin ?? false
   const medals = ['🥇', '🥈', '🥉']
+  const pointsByRank = effectivePointsDistribution(activity)
 
   const subjectName = (subjectId: string) => {
     if (activity.isTeam) {
@@ -92,16 +98,22 @@ function ActivityPage() {
         <h2 id="points-heading" className="label">
           Points by rank
         </h2>
-        <ol className="flex flex-wrap gap-2">
-          {activity.pointsDistribution.map((points, index) => (
-            <li key={index} className="panel px-3 py-2 text-center" style={{ boxShadow: 'var(--shadow-print-sm)' }}>
-              <span className="block text-xs text-ink-soft">
-                {medals[index] ?? `${index + 1}.`}
-              </span>
-              <span className="num font-bold">{points}</span>
-            </li>
-          ))}
-        </ol>
+        {pointsByRank.length > 0 ? (
+          <ol className="flex flex-wrap gap-2">
+            {pointsByRank.map((points, index) => (
+              <li key={index} className="panel px-3 py-2 text-center" style={{ boxShadow: 'var(--shadow-print-sm)' }}>
+                <span className="block text-xs text-ink-soft">
+                  {medals[index] ?? `${index + 1}.`}
+                </span>
+                <span className="num font-bold">{points}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-ink-soft">
+            Points are set from the number of teams — draw the teams below to see them.
+          </p>
+        )}
       </section>
 
       {ranked.length > 0 ? (
@@ -364,7 +376,9 @@ function ResultsEditor({
   const [values, setValues] = React.useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
     for (const result of activity.results) {
-      initial[result.subjectId] = formatValue(activity, result.value).split(' ')[0] ?? ''
+      // Edit the raw value: mm:ss for times, plain number for everything else.
+      initial[result.subjectId] =
+        activity.kind === 'time' ? formatTime(result.value) : String(result.value)
     }
     return initial
   })
@@ -447,7 +461,13 @@ function ResultsEditor({
                   id={`result-${subject.id}`}
                   className="input num max-w-36"
                   inputMode="decimal"
-                  placeholder={activity.kind === 'time' ? '1:23.4' : '0'}
+                  placeholder={
+                    activity.kind === 'time'
+                      ? '1:23.4'
+                      : activity.kind === 'rank'
+                        ? '1'
+                        : '0'
+                  }
                   value={values[subject.id] ?? ''}
                   onChange={(e) =>
                     setValues((prev) => ({ ...prev, [subject.id]: e.target.value }))

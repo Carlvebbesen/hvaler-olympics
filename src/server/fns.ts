@@ -5,6 +5,7 @@ import { buildLeaderboard, rankActivity } from '~/lib/scoring'
 import type {
   Activity,
   ActivityKind,
+  ClerkCandidate,
   EventStatus,
   OlympicsEvent,
   Profile,
@@ -90,6 +91,58 @@ export const listProfiles = createServerFn({ method: 'GET' }).handler(
     return db.listProfiles()
   },
 )
+
+/**
+ * Clerk users who haven't been turned into athletes yet. Lets the committee
+ * pre-register people from the Clerk directory and backfill their results
+ * before they ever sign in — the profile is keyed by their Clerk id, so it
+ * links up automatically the day they do.
+ */
+export const listClerkCandidates = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<ClerkCandidate[]> => {
+    await requireAdmin()
+    const profiles = await db.listProfiles()
+    const claimed = new Set(profiles.map((p) => p.id))
+    const { data } = await clerkClient().users.getUserList({ limit: 200 })
+    return data
+      .filter((user) => !claimed.has(user.id))
+      .map((user) => ({
+        id: user.id,
+        name:
+          user.fullName?.trim() ||
+          user.username ||
+          user.primaryEmailAddress?.emailAddress ||
+          'Mystery athlete',
+        email: user.primaryEmailAddress?.emailAddress || undefined,
+        imageUrl: user.imageUrl || undefined,
+      }))
+  },
+)
+
+/** Pre-create an athlete profile for a Clerk user who hasn't signed in yet. */
+export const addClerkAthlete = createServerFn({ method: 'POST' })
+  .validator((data: { clerkUserId: string }) => data)
+  .handler(async ({ data }): Promise<Profile> => {
+    await requireAdmin()
+    const existing = await db.getProfile(data.clerkUserId)
+    if (existing) return existing
+    const user = await clerkClient().users.getUser(data.clerkUserId)
+    const admins = await db.getAdminIds()
+    const profile: Profile = {
+      id: user.id,
+      name:
+        user.fullName?.trim() ||
+        user.username ||
+        user.primaryEmailAddress?.emailAddress ||
+        'Mystery athlete',
+      emoji: ATHLETE_EMOJI[Math.floor(Math.random() * ATHLETE_EMOJI.length)]!,
+      imageUrl: user.imageUrl || undefined,
+      isAdmin: admins.includes(user.id),
+      createdAt: new Date().toISOString(),
+    }
+    await db.putProfile(profile)
+    return profile
+  })
 
 // ---------- Events ----------
 
@@ -203,7 +256,8 @@ export const createActivity = createServerFn({ method: 'POST' })
     if (!event) throw new Error('Event not found')
     const name = data.name.trim()
     if (!name) throw new Error('Activity name is required')
-    if (data.pointsDistribution.length === 0)
+    // Team activities derive their points from the number of teams at scoring time.
+    if (!data.isTeam && data.pointsDistribution.length === 0)
       throw new Error('Points distribution is required')
     if (data.kind === 'guess' && data.target === undefined)
       throw new Error('A guess activity needs a target value')

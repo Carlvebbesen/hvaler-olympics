@@ -7,6 +7,14 @@ export type Profile = {
   createdAt: string
 }
 
+/** A Clerk user who doesn't have an athlete profile yet. */
+export type ClerkCandidate = {
+  id: string
+  name: string
+  email?: string
+  imageUrl?: string
+}
+
 export type EventStatus = 'upcoming' | 'active' | 'completed'
 
 export type OlympicsEvent = {
@@ -24,9 +32,11 @@ export type OlympicsEvent = {
  * - time:   seconds (entered as "1:23.4" or "83.4"), lower is better by default
  * - count:  integer (strokes, hits, laps...)
  * - points: free-form score
+ * - rounds: number of rounds completed correctly, higher is better
+ * - rank:   the finishing place is entered directly (1, 2, 3...)
  * - guess:  number compared against a hidden target, closest wins
  */
-export type ActivityKind = 'time' | 'count' | 'points' | 'guess'
+export type ActivityKind = 'time' | 'count' | 'points' | 'rounds' | 'rank' | 'guess'
 
 export type ScoringDirection = 'lowest' | 'highest' | 'closest'
 
@@ -82,7 +92,7 @@ export type LeaderboardRow = {
   totalPoints: number
 }
 
-export const DEFAULT_POINTS = [10, 8, 6, 5, 4, 3, 2, 1]
+export const DEFAULT_POINTS = [1000, 900, 800, 700, 600, 500, 400, 300, 200, 100]
 
 export const KIND_DEFAULTS: Record<
   ActivityKind,
@@ -91,5 +101,7 @@ export const KIND_DEFAULTS: Record<
   time: { direction: 'lowest', label: 'Time', hint: 'Fastest wins — enter mm:ss.t or seconds' },
   count: { direction: 'lowest', label: 'Count', hint: 'Strokes, throws, attempts…' },
   points: { direction: 'highest', label: 'Points', hint: 'Highest score wins' },
+  rounds: { direction: 'highest', label: 'Rounds', hint: 'Rounds completed correctly — most wins' },
+  rank: { direction: 'lowest', label: 'Placement', hint: 'Enter each finishing place — 1, 2, 3…' },
   guess: { direction: 'closest', label: 'Guess', hint: 'Closest to the target wins' },
 }

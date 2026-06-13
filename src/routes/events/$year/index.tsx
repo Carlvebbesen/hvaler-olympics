@@ -3,7 +3,7 @@ import { Link, createFileRoute, notFound, redirect } from '@tanstack/react-route
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createActivity, setParticipant } from '~/server/fns'
 import { eventDetailQuery } from '~/lib/queries'
-import { parsePointsDistribution } from '~/lib/scoring'
+import { effectivePointsDistribution, parsePointsDistribution } from '~/lib/scoring'
 import { DEFAULT_POINTS, KIND_DEFAULTS } from '~/lib/types'
 import type { ActivityKind, ScoringDirection } from '~/lib/types'
 import { Podium } from '~/components/Podium'
@@ -121,10 +121,19 @@ function EventPage() {
                         ? 'highest wins'
                         : 'closest wins'}
                   </p>
-                  <p className="num mt-3 text-xs text-ink-soft">
-                    {activity.pointsDistribution.slice(0, 4).join(' · ')}
-                    {activity.pointsDistribution.length > 4 ? ' · …' : ''} pts
-                  </p>
+                  {(() => {
+                    const dist = effectivePointsDistribution(activity)
+                    return dist.length > 0 ? (
+                      <p className="num mt-3 text-xs text-ink-soft">
+                        {dist.slice(0, 4).join(' · ')}
+                        {dist.length > 4 ? ' · …' : ''} pts
+                      </p>
+                    ) : (
+                      <p className="mt-3 text-xs text-ink-soft">
+                        points set once teams are drawn
+                      </p>
+                    )
+                  })()}
                 </Link>
               </li>
             ))}
@@ -228,8 +237,13 @@ function NewActivityForm({ year }: { year: number }) {
 
   const create = useMutation({
     mutationFn: () => {
-      const pointsDistribution = parsePointsDistribution(points)
-      if (!pointsDistribution) throw new Error('Points must be numbers, e.g. “10, 8, 6”')
+      // Team activities derive their points from the number of teams.
+      let pointsDistribution: number[] = []
+      if (!isTeam) {
+        const parsed = parsePointsDistribution(points)
+        if (!parsed) throw new Error('Points must be numbers, e.g. “1000, 900, 800”')
+        pointsDistribution = parsed
+      }
       return createActivity({
         data: {
           year,
@@ -259,6 +273,12 @@ function NewActivityForm({ year }: { year: number }) {
     setDirection(KIND_DEFAULTS[next].direction)
   }
 
+  // Direction only matters where it's genuinely ambiguous; the other kinds are fixed.
+  const showDirection = kind === 'time' || kind === 'count' || kind === 'points'
+  const showTarget = kind === 'guess' || (showDirection && direction === 'closest')
+  const showUnit =
+    !showTarget && (kind === 'count' || kind === 'points' || kind === 'rounds')
+
   return (
     <details ref={detailsRef} className="panel mt-8 p-6">
       <summary className="cursor-pointer font-display text-lg font-bold uppercase tracking-wide">
@@ -287,7 +307,7 @@ function NewActivityForm({ year }: { year: number }) {
 
         <fieldset className="sm:col-span-2">
           <legend className="label">What do we measure?</legend>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {(Object.keys(KIND_DEFAULTS) as ActivityKind[]).map((option) => (
               <button
                 key={option}
@@ -309,23 +329,35 @@ function NewActivityForm({ year }: { year: number }) {
           </div>
         </fieldset>
 
-        <div>
-          <label className="label" htmlFor="activity-direction">
-            Winner is
-          </label>
-          <select
-            id="activity-direction"
-            className="input"
-            value={direction}
-            onChange={(e) => setDirection(e.target.value as ScoringDirection)}
-          >
-            <option value="lowest">Lowest value</option>
-            <option value="highest">Highest value</option>
-            <option value="closest">Closest to target</option>
-          </select>
-        </div>
+        <label className="flex min-h-11 items-center gap-3 font-display font-bold sm:col-span-2">
+          <input
+            type="checkbox"
+            className="h-5 w-5 accent-[#d94f1e]"
+            checked={isTeam}
+            onChange={(e) => setIsTeam(e.target.checked)}
+          />
+          Team activity
+        </label>
 
-        {kind === 'guess' || direction === 'closest' ? (
+        {showDirection ? (
+          <div>
+            <label className="label" htmlFor="activity-direction">
+              Winner is
+            </label>
+            <select
+              id="activity-direction"
+              className="input"
+              value={direction}
+              onChange={(e) => setDirection(e.target.value as ScoringDirection)}
+            >
+              <option value="lowest">Lowest value</option>
+              <option value="highest">Highest value</option>
+              <option value="closest">Closest to target</option>
+            </select>
+          </div>
+        ) : null}
+
+        {showTarget ? (
           <div>
             <label className="label" htmlFor="activity-target">
               Target value
@@ -340,7 +372,9 @@ function NewActivityForm({ year }: { year: number }) {
               onChange={(e) => setTarget(e.target.value)}
             />
           </div>
-        ) : (
+        ) : null}
+
+        {showUnit ? (
           <div>
             <label className="label" htmlFor="activity-unit">
               Unit <span className="font-normal normal-case text-ink-soft">(optional)</span>
@@ -348,30 +382,41 @@ function NewActivityForm({ year }: { year: number }) {
             <input
               id="activity-unit"
               className="input"
-              placeholder={kind === 'time' ? 'shown as mm:ss' : 'strokes, m, pts…'}
-              disabled={kind === 'time'}
-              value={kind === 'time' ? '' : unit}
+              placeholder={kind === 'rounds' ? 'rounds (optional)' : 'strokes, m, pts…'}
+              value={unit}
               onChange={(e) => setUnit(e.target.value)}
             />
           </div>
-        )}
+        ) : null}
 
-        <div className="sm:col-span-2">
-          <label className="label" htmlFor="activity-points">
-            Points by rank
-          </label>
-          <input
-            id="activity-points"
-            className="input num"
-            required
-            value={points}
-            onChange={(e) => setPoints(e.target.value)}
-          />
-          <p className="mt-1 text-sm text-ink-soft">
-            First number goes to 1st place, second to 2nd place, and so on. Ranks
-            beyond the list get 0.
-          </p>
-        </div>
+        {isTeam ? (
+          <div className="sm:col-span-2">
+            <p className="label">Points by rank</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              Set automatically from the number of teams — 2 teams: 500 / 0, 3
+              teams: 500 / 300 / 0, 4 teams: 600 / 400 / 200 / 0. Last place
+              always gets 0.
+            </p>
+          </div>
+        ) : (
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor="activity-points">
+              Points by rank
+            </label>
+            <input
+              id="activity-points"
+              className="input num"
+              required
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+            />
+            <p className="mt-1 text-sm text-ink-soft">
+              First number goes to 1st place, second to 2nd place, and so on.
+              Ranks beyond the list get 0. Ties share a place and the next
+              place is skipped.
+            </p>
+          </div>
+        )}
 
         <div className="sm:col-span-2">
           <label className="label" htmlFor="activity-description">
@@ -384,16 +429,6 @@ function NewActivityForm({ year }: { year: number }) {
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
-
-        <label className="flex min-h-11 items-center gap-3 font-display font-bold">
-          <input
-            type="checkbox"
-            className="h-5 w-5 accent-[#d94f1e]"
-            checked={isTeam}
-            onChange={(e) => setIsTeam(e.target.checked)}
-          />
-          Team activity
-        </label>
 
         {formError ? (
           <p role="alert" className="rounded border-2 border-flag bg-flag/10 px-4 py-2 text-flag-deep sm:col-span-2">

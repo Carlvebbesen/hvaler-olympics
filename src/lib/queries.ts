@@ -4,6 +4,7 @@ import {
   getActivityDetail,
   getEventDetail,
   getHome,
+  listClerkCandidates,
   listEvents,
   listProfiles,
 } from '~/server/fns'
@@ -27,6 +28,11 @@ export const eventsQuery = queryOptions({
 export const profilesQuery = queryOptions({
   queryKey: ['profiles'],
   queryFn: () => listProfiles(),
+})
+
+export const clerkCandidatesQuery = queryOptions({
+  queryKey: ['clerk-candidates'],
+  queryFn: () => listClerkCandidates(),
 })
 
 export const eventDetailQuery = (year: number) =>

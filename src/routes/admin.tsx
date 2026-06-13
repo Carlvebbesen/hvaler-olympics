@@ -1,8 +1,13 @@
 import * as React from 'react'
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createEvent, updateEventStatus } from '~/server/fns'
-import { eventsQuery } from '~/lib/queries'
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from '@tanstack/react-query'
+import { addClerkAthlete, createEvent, updateEventStatus } from '~/server/fns'
+import { clerkCandidatesQuery, eventsQuery } from '~/lib/queries'
 import type { EventStatus } from '~/lib/types'
 
 export const Route = createFileRoute('/admin')({
@@ -201,6 +206,91 @@ function AdminPage() {
           </ul>
         )}
       </section>
+
+      <ClerkBackfill />
     </main>
+  )
+}
+
+function ClerkBackfill() {
+  const queryClient = useQueryClient()
+  const { data: candidates, isPending, isError, error } = useQuery(clerkCandidatesQuery)
+
+  const add = useMutation({
+    mutationFn: (clerkUserId: string) => addClerkAthlete({ data: { clerkUserId } }),
+    onSuccess: () => queryClient.invalidateQueries(),
+  })
+
+  return (
+    <section aria-labelledby="roster-heading" className="mt-12">
+      <h2 id="roster-heading" className="display-tight text-2xl">
+        Backfill athletes
+      </h2>
+      <p className="mt-1 max-w-2xl text-sm text-ink-soft">
+        Pull people straight from Clerk so you can register them and record their
+        results before they ever sign in. Their athlete card links up to their
+        account automatically the day they log in.
+      </p>
+
+      {isPending ? (
+        <p className="mt-4 text-ink-soft">Loading the Clerk directory…</p>
+      ) : isError ? (
+        <p role="alert" className="mt-4 rounded border-2 border-flag bg-flag/10 px-4 py-2 text-flag-deep">
+          Couldn't reach Clerk: {(error as Error).message}
+        </p>
+      ) : candidates.length === 0 ? (
+        <p className="mt-4 text-ink-soft">
+          Everyone in Clerk already has an athlete profile.
+        </p>
+      ) : (
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+          {candidates.map((candidate) => {
+            const adding = add.isPending && add.variables === candidate.id
+            return (
+              <li key={candidate.id} className="panel flex items-center gap-3 p-3">
+                {candidate.imageUrl ? (
+                  <img
+                    src={candidate.imageUrl}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded-full border-2 border-ink object-cover"
+                  />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-paper"
+                  >
+                    🏅
+                  </span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-display font-bold">
+                    {candidate.name}
+                  </span>
+                  {candidate.email ? (
+                    <span className="block truncate text-sm text-ink-soft">
+                      {candidate.email}
+                    </span>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm shrink-0"
+                  disabled={adding}
+                  onClick={() => add.mutate(candidate.id)}
+                >
+                  {adding ? 'Adding…' : 'Add'}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {add.isError ? (
+        <p role="alert" className="mt-3 rounded border-2 border-flag bg-flag/10 px-4 py-2 text-flag-deep">
+          {(add.error as Error).message}
+        </p>
+      ) : null}
+    </section>
   )
 }

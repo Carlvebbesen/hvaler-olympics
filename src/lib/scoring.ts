@@ -7,9 +7,43 @@ import type {
 } from './types'
 
 /**
+ * Default points for team activities, decided by how many teams take part.
+ * Last place always lands on 0; ties still share points via rankActivity.
+ */
+export function teamPointsDistribution(teamCount: number): number[] {
+  switch (teamCount) {
+    case 0:
+    case 1:
+      return []
+    case 2:
+      return [500, 0]
+    case 3:
+      return [500, 300, 0]
+    case 4:
+      return [600, 400, 200, 0]
+    default:
+      // 5+ teams: even steps of 200 down to 0
+      return Array.from({ length: teamCount }, (_, i) => (teamCount - 1 - i) * 200)
+  }
+}
+
+/**
+ * The points actually used to score an activity. Team activities derive their
+ * distribution from the number of teams; individual activities use their own.
+ */
+export function effectivePointsDistribution(
+  activity: Pick<Activity, 'isTeam' | 'teams' | 'pointsDistribution'>,
+): number[] {
+  return activity.isTeam
+    ? teamPointsDistribution(activity.teams.length)
+    : activity.pointsDistribution
+}
+
+/**
  * Rank raw results for an activity and award points.
  * Uses standard competition ranking: ties share the better rank
- * (1, 1, 3, ...) and receive the same points.
+ * (1, 2, 2, 4, ...) and receive the same points, with the skipped
+ * place(s) handed out to nobody.
  */
 export function rankActivity(activity: Activity): RankedResult[] {
   const score = (value: number) => {
@@ -24,6 +58,7 @@ export function rankActivity(activity: Activity): RankedResult[] {
   }
 
   const sorted = [...activity.results].sort((a, b) => score(a.value) - score(b.value))
+  const distribution = effectivePointsDistribution(activity)
 
   const ranked: RankedResult[] = []
   for (let i = 0; i < sorted.length; i++) {
@@ -34,7 +69,7 @@ export function rankActivity(activity: Activity): RankedResult[] {
     ranked.push({
       ...entry,
       rank,
-      points: activity.pointsDistribution[rank - 1] ?? 0,
+      points: distribution[rank - 1] ?? 0,
       label: entry.subjectId,
       memberIds: [entry.subjectId],
     })
@@ -123,8 +158,27 @@ export function formatTime(seconds: number): string {
   return `${sign}${m}:${secStr}`
 }
 
+/** Turn 1, 2, 3, 21 into "1st", "2nd", "3rd", "21st". */
+export function formatOrdinal(value: number): string {
+  const n = Math.round(value)
+  const tens = Math.abs(n) % 100
+  const ones = Math.abs(n) % 10
+  const suffix =
+    tens >= 11 && tens <= 13
+      ? 'th'
+      : ones === 1
+        ? 'st'
+        : ones === 2
+          ? 'nd'
+          : ones === 3
+            ? 'rd'
+            : 'th'
+  return `${n}${suffix}`
+}
+
 export function formatValue(activity: Pick<Activity, 'kind' | 'unit'>, value: number): string {
   if (activity.kind === 'time') return formatTime(value)
+  if (activity.kind === 'rank') return formatOrdinal(value)
   const formatted = Number.isInteger(value)
     ? value.toLocaleString('en-US')
     : value.toLocaleString('en-US', { maximumFractionDigits: 2 })
